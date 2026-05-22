@@ -1,6 +1,7 @@
 import os
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -18,34 +19,39 @@ def generate_script(topic: str):
         print("Falling back to a mocked script for demonstration purposes.")
         return mock_generate_script(topic)
         
-    genai.configure(api_key=API_KEY)
     print(f"Generating script for topic: '{topic}' via Gemini API...")
     
-    # We use a generative model. 
-    model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
-    
-    prompt = f"""
-    You are an expert video script writer. Write a 60-second video script about: "{topic}".
-    The script should be engaging and perfectly timed for 60 seconds (around 130-150 words).
-    
-    Output the script strictly as a JSON object with a timeline. The JSON structure must be:
-    {{
-        "topic": "{topic}",
-        "duration_seconds": 60,
-        "timeline": [
-            {{
-                "start_time": 0.0,
-                "end_time": 5.0,
-                "text": "Sentence or phrase to be spoken.",
-                "visual_keyword": "keyword for UI capture or stock clip"
-            }}
-        ]
-    }}
-    Ensure the timelines roughly cover the 60-second duration sequentially.
-    """
-    
     try:
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=API_KEY)
+        
+        prompt = f"""
+        You are an expert video script writer. Write a 60-second video script about: "{topic}".
+        The script should be engaging and perfectly timed for 60 seconds (around 130-150 words).
+        
+        Output the script strictly as a JSON object with a timeline. The JSON structure must be:
+        {{
+            "topic": "{topic}",
+            "duration_seconds": 60,
+            "timeline": [
+                {{
+                    "start_time": 0.0,
+                    "end_time": 5.0,
+                    "text": "Sentence or phrase to be spoken.",
+                    "visual_keyword": "keyword for UI capture or stock clip"
+                }}
+            ]
+        }}
+        Ensure the timelines roughly cover the 60-second duration sequentially.
+        """
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            )
+        )
+        
         script_data = json.loads(response.text)
         save_script(topic, script_data)
         return script_data
