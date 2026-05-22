@@ -1,12 +1,16 @@
 import os
 import json
-from moviepy.editor import ColorClip, TextClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
+import random
+from moviepy.editor import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips, ColorClip
 
-def render_video(script_path: str):
-    """
-    Phase 3: Visual Sync and Render
-    Reads the JSON timestamps and audio paths, creates synchronized clips, and renders the final MP4.
-    """
+# Add src to path so we can import our new modules
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from src.pexels_fetcher import download_broll
+from src.caption_engine import generate_captions_from_timestamps
+
+def render_final_video(script_path: str):
+    print("--- PHASE 3: FACELESS VIDEO RENDERING (SHORTS/REELS STYLE) ---")
     if not os.path.exists(script_path):
         print(f"Error: Script file not found at {script_path}")
         return
@@ -17,99 +21,106 @@ def render_video(script_path: str):
     topic = script_data.get("topic", "unknown")
     timeline = script_data.get("timeline", [])
     
-    print(f"Starting Phase 3 render for: '{topic}'...")
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    outputs_dir = os.path.join(base_dir, "outputs", "rendered_videos")
+    os.makedirs(outputs_dir, exist_ok=True)
     
-    video_clips = []
+    final_output_path = os.path.join(outputs_dir, f"{topic.replace(' ', '_').lower()}_final.mp4")
+    
+    video_segments = []
+    video_size = (1080, 1920) # YouTube Shorts / Reels aspect ratio 9:16
     
     for i, segment in enumerate(timeline):
         audio_path = segment.get("audio_path")
-        visual_keyword = segment.get("visual_keyword", "No Keyword")
-        text = segment.get("text", "")
+        timestamp_path = segment.get("timestamp_path")
+        visual_keyword = segment.get("visual_keyword", topic)
         
         if not audio_path or not os.path.exists(audio_path):
-            print(f"Warning: Audio file missing for segment {i}. Skipping.")
+            print(f"Skipping segment {i}: Audio not found.")
             continue
             
-        # Load audio to get actual duration
-        audio_clip = AudioFileClip(audio_path)
-        duration = audio_clip.duration
+        print(f"\n🎥 Processing Segment {i}: {visual_keyword}")
         
-        # In a full Playwright implementation, we would trigger UI capture here.
-        # For the MVP, we generate a placeholder visual clip using MoviePy.
-        
-        # 1. Visual Capture via Playwright (Dynamic HeyGen UI Architecture)
-        import sys
-        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
         try:
-            from src.ui_automation import capture_ui_workflow
-            from moviepy.editor import VideoFileClip
+            audio_clip = AudioFileClip(audio_path)
+            duration = audio_clip.duration
             
-            video_filename = f"segment_{i}.webm"
-            timestamp_path = segment.get("timestamp_path")
+            # 1. Fetch B-Roll from Pexels
+            broll_filename = os.path.join(base_dir, "assets", "visuals", f"broll_{i}.mp4")
+            os.makedirs(os.path.dirname(broll_filename), exist_ok=True)
             
-            # Playwright captures the UI completely perfectly synced to the timestamp!
-            ui_video_path = capture_ui_workflow(visual_keyword, duration, video_filename, timestamp_path)
+            broll_path = download_broll(visual_keyword, broll_filename, duration)
             
-            if ui_video_path and os.path.exists(ui_video_path):
-                bg_clip = VideoFileClip(ui_video_path)
-                # Ensure it matches exact duration
-                if bg_clip.duration > duration:
+            if broll_path and os.path.exists(broll_path):
+                bg_clip = VideoFileClip(broll_path)
+                
+                # Loop or trim B-roll to match audio duration perfectly
+                if bg_clip.duration < duration:
+                    import moviepy.video.fx.all as vfx
+                    bg_clip = bg_clip.fx(vfx.loop, duration=duration)
+                else:
                     bg_clip = bg_clip.subclip(0, duration)
-                bg_clip = bg_clip.resize(newsize=(1920, 1080))
             else:
-                bg_clip = ColorClip(size=(1920, 1080), color=(30, 30, 30), duration=duration)
-        except ImportError:
-            print("UI Automation module not found. Using ColorClip.")
-            bg_clip = ColorClip(size=(1920, 1080), color=(30, 30, 30), duration=duration)
-        
-        # 2. Text Overlay (Visual Keyword)
-        try:
-            # Requires ImageMagick installed on the system to use TextClip effectively
-            txt_clip = TextClip(f"[{visual_keyword}]\n{text}", fontsize=50, color='white', bg_color='transparent', size=(1800, 1000), method='caption')
-            txt_clip = txt_clip.set_pos('center').set_duration(duration)
+                # Fallback to a colored background if Pexels fails or API key missing
+                colors = [(30, 30, 40), (40, 20, 30), (20, 40, 40)]
+                bg_clip = ColorClip(size=video_size, color=random.choice(colors), duration=duration)
+                
+            # Resize and crop to 9:16 portrait
+            from moviepy.video.fx.all import crop, resize
+            w, h = bg_clip.size
+            target_ratio = 1080 / 1920.0
+            current_ratio = w / float(h)
             
-            # Combine
-            comp_clip = CompositeVideoClip([bg_clip, txt_clip])
+            if current_ratio > target_ratio:
+                # Video is wider, crop width
+                new_w = int(h * target_ratio)
+                x_center = w / 2
+                bg_clip = crop(bg_clip, width=new_w, height=h, x_center=x_center)
+            else:
+                # Video is taller, crop height
+                new_h = int(w / target_ratio)
+                y_center = h / 2
+                bg_clip = crop(bg_clip, width=w, height=new_h, y_center=y_center)
+                
+            bg_clip = resize(bg_clip, newsize=video_size)
+            
+            # 2. Generate Pop-Up Captions synced to exact timestamps
+            caption_clips = []
+            if timestamp_path and os.path.exists(timestamp_path):
+                print("📝 Generating synchronized pop-up captions...")
+                caption_clips = generate_captions_from_timestamps(timestamp_path, video_size)
+                
+            # 3. Composite everything together
+            layers = [bg_clip] + caption_clips
+            final_segment = CompositeVideoClip(layers, size=video_size)
+            final_segment = final_segment.set_audio(audio_clip)
+            
+            video_segments.append(final_segment)
+            
         except Exception as e:
-            print(f"TextClip failed (ImageMagick might be missing/unconfigured). Using plain background. Error: {e}")
-            comp_clip = bg_clip
+            print(f"❌ Error rendering segment {i}: {e}")
             
-        # Set the audio to the composite clip
-        comp_clip = comp_clip.set_audio(audio_clip)
-        
-        video_clips.append(comp_clip)
-        
-    if not video_clips:
-        print("No valid clips were generated. Aborting render.")
+    if not video_segments:
+        print("Error: No segments were successfully rendered.")
         return
         
-    # Concatenate all segments sequentially
-    print("Concatenating clips and rendering final video. This may take a moment...")
-    final_video = concatenate_videoclips(video_clips, method="compose")
+    print("\n🎬 Stitching all segments together...")
+    final_video = concatenate_videoclips(video_segments, method="compose")
     
-    # Save the output
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    output_dir = os.path.join(base_dir, "outputs", "rendered_videos")
-    os.makedirs(output_dir, exist_ok=True)
-    
-    output_path = os.path.join(output_dir, f"{topic.replace(' ', '_').lower()}_final.mp4")
-    
-    # Render with optimal Colab settings (T4 GPU compatible if hw accel added later)
+    print(f"💾 Saving Final Masterpiece to: {final_output_path}")
     final_video.write_videofile(
-        output_path, 
-        fps=24, 
-        codec="libx264", 
-        audio_codec="aac", 
-        threads=4, 
-        preset="ultrafast" # fast render for MVP
+        final_output_path,
+        fps=30,
+        codec="libx264",
+        audio_codec="aac",
+        threads=4,
+        logger=None # Suppress massive MoviePy output
     )
-    
-    print(f"\nRender Complete! Video saved to: {output_path}")
+    print(f"✅ FINAL VIDEO RENDERED SUCCESSFULLY: {final_output_path}")
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Phase 3: Video Render")
-    parser.add_argument("--script", type=str, required=True, help="Path to the JSON script from Phase 2 (with audio paths)")
+    parser = argparse.ArgumentParser(description="Phase 3: Render Faceless B-Roll & Captions Video")
+    parser.add_argument("--script", type=str, required=True)
     args = parser.parse_args()
-    
-    render_video(args.script)
+    render_final_video(args.script)
