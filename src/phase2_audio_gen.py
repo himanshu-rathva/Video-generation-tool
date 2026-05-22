@@ -76,25 +76,39 @@ def generate_audio_for_script(script_path: str):
             if hasattr(request, "enable_word_time_offsets"):
                 request.enable_word_time_offsets = True
                 
-            response = client.synthesize_speech(request=request)
-            
-            with open(audio_filepath, "wb") as out:
-                out.write(response.audio_content)
+            try:
+                response = client.synthesize_speech(request=request)
                 
-            word_timestamps = []
-            if hasattr(response, "timepoints") and response.timepoints:
-                for tp in response.timepoints:
-                    word_timestamps.append({"word": tp.mark_name, "startTime": tp.time_seconds})
-            
-            if not word_timestamps:
+                with open(audio_filepath, "wb") as out:
+                    out.write(response.audio_content)
+                    
+                word_timestamps = []
+                if hasattr(response, "timepoints") and response.timepoints:
+                    for tp in response.timepoints:
+                        word_timestamps.append({"word": tp.mark_name, "startTime": tp.time_seconds})
+                
+                if not word_timestamps:
+                    word_timestamps = generate_mock_word_timestamps(text, audio_filepath)
+                    
+                with open(timestamp_filepath, "w", encoding="utf-8") as f:
+                    json.dump(word_timestamps, f, indent=4)
+                    
+                segment["audio_path"] = audio_filepath
+                segment["timestamp_path"] = timestamp_filepath
+                print(f"[{i}] Generated Neural2 Audio + Timestamps")
+            except Exception as e:
+                print(f"⚠️ GCP TTS API Error: {e}")
+                print(f"[{i}] Falling back to gTTS (Mock Timestamps)...")
+                from gtts import gTTS
+                tts = gTTS(text=text, lang='hi', slow=False)
+                tts.save(audio_filepath)
+                
                 word_timestamps = generate_mock_word_timestamps(text, audio_filepath)
-                
-            with open(timestamp_filepath, "w", encoding="utf-8") as f:
-                json.dump(word_timestamps, f, indent=4)
-                
-            segment["audio_path"] = audio_filepath
-            segment["timestamp_path"] = timestamp_filepath
-            print(f"[{i}] Generated Neural2 Audio + Timestamps")
+                with open(timestamp_filepath, "w", encoding="utf-8") as f:
+                    json.dump(word_timestamps, f, indent=4)
+                    
+                segment["audio_path"] = audio_filepath
+                segment["timestamp_path"] = timestamp_filepath
             
         else:
             # Fallback to gTTS
