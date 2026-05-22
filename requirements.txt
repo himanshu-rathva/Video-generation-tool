@@ -3,3 +3,4 @@ python-dotenv
 gTTS
 moviepy==1.0.3
 playwright
+google-cloud-texttospeech

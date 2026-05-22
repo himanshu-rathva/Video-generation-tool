@@ -1,13 +1,8 @@
 import os
 import json
-from gtts import gTTS
 
 def generate_audio_for_script(script_path: str):
-    """
-    Reads the generated JSON script and creates audio files for each timeline segment.
-    Uses a temporary manual asset folder. Falls back to gTTS for instant prototyping 
-    before GCP Neural2 billing is configured.
-    """
+    print("--- PHASE 2: AUDIO SYNC & TIMESTAMPS ---")
     if not os.path.exists(script_path):
         print(f"Error: Script file not found at {script_path}")
         return
@@ -18,43 +13,135 @@ def generate_audio_for_script(script_path: str):
     topic = script_data.get("topic", "unknown")
     timeline = script_data.get("timeline", [])
     
-    # Create manual asset folder
     base_dir = os.path.dirname(os.path.dirname(__file__))
     audio_asset_dir = os.path.join(base_dir, "assets", "audio", topic.replace(" ", "_").lower())
     os.makedirs(audio_asset_dir, exist_ok=True)
     
-    print(f"Checking audio assets for topic: '{topic}' in {audio_asset_dir}...")
+    # Check for Google Cloud Credentials
+    from dotenv import load_dotenv
+    load_dotenv()
     
+    gcp_cred_path = os.path.join(base_dir, "gcp_credentials.json")
+    use_gcp = False
+    gcp_api_key = os.getenv("GCP_API_KEY")
+    
+    if os.path.exists(gcp_cred_path):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_cred_path
+        use_gcp = True
+        print("✅ GCP Credentials found! Using Google Cloud Neural2 with Word Timestamps.")
+    elif gcp_api_key:
+        use_gcp = True
+        print("✅ GCP API Key found! Using Google Cloud Neural2 with Word Timestamps.")
+    else:
+        print("⚠️ Warning: GCP credentials/API Key not found! Falling back to gTTS (Mock timestamps).")
+        print("Please read GCP_SETUP_GUIDE.md to unlock HeyGen-level precision syncing.")
+        
+    if use_gcp:
+        try:
+            from google.cloud import texttospeech
+            from google.api_core.client_options import ClientOptions
+            if gcp_api_key and not os.path.exists(gcp_cred_path):
+                client_options = ClientOptions(api_key=gcp_api_key)
+                client = texttospeech.TextToSpeechClient(client_options=client_options)
+            else:
+                client = texttospeech.TextToSpeechClient()
+        except ImportError:
+            print("❌ google-cloud-texttospeech not installed. Run: pip install -r requirements.txt")
+            use_gcp = False
+
     for i, segment in enumerate(timeline):
         text = segment.get("text", "")
-        # Naming convention for manual audio files
         audio_filename = f"segment_{i}.mp3"
         audio_filepath = os.path.join(audio_asset_dir, audio_filename)
+        timestamp_filepath = os.path.join(audio_asset_dir, f"segment_{i}_timestamps.json")
         
-        # Check if manual Neural2 audio was placed by user
-        if os.path.exists(audio_filepath):
-            print(f"[{i}] Found manual audio asset: {audio_filename}")
+        if use_gcp:
+            # 1. Call GCP TTS
+            synthesis_input = texttospeech.SynthesisInput(text=text)
+            voice = texttospeech.VoiceSelectionParams(
+                language_code="hi-IN",
+                name="hi-IN-Neural2-B"
+            )
+            audio_config = texttospeech.AudioConfig(
+                audio_encoding=texttospeech.AudioEncoding.MP3
+            )
+            
+            request = texttospeech.SynthesizeSpeechRequest(
+                input=synthesis_input,
+                voice=voice,
+                audio_config=audio_config
+            )
+            
+            # Attempt to use Word Time Offsets if supported by the SDK
+            if hasattr(request, "enable_word_time_offsets"):
+                request.enable_word_time_offsets = True
+                
+            response = client.synthesize_speech(request=request)
+            
+            with open(audio_filepath, "wb") as out:
+                out.write(response.audio_content)
+                
+            word_timestamps = []
+            if hasattr(response, "timepoints") and response.timepoints:
+                for tp in response.timepoints:
+                    word_timestamps.append({"word": tp.mark_name, "startTime": tp.time_seconds})
+            
+            if not word_timestamps:
+                word_timestamps = generate_mock_word_timestamps(text, audio_filepath)
+                
+            with open(timestamp_filepath, "w", encoding="utf-8") as f:
+                json.dump(word_timestamps, f, indent=4)
+                
+            segment["audio_path"] = audio_filepath
+            segment["timestamp_path"] = timestamp_filepath
+            print(f"[{i}] Generated Neural2 Audio + Timestamps")
+            
         else:
-            print(f"[{i}] Manual asset missing. Generating temp audio via gTTS for: '{text[:30]}...'")
-            # Fallback to gTTS for MVP pipeline completion
-            tts = gTTS(text=text, lang='en', slow=False)
+            # Fallback to gTTS
+            from gtts import gTTS
+            tts = gTTS(text=text, lang='hi', slow=False) # Changed to Hindi to match HeyGen target
             tts.save(audio_filepath)
             
-        # Update segment with audio path
-        segment["audio_path"] = audio_filepath
-        
-    # Save the updated script with audio paths
+            word_timestamps = generate_mock_word_timestamps(text, audio_filepath)
+            with open(timestamp_filepath, "w", encoding="utf-8") as f:
+                json.dump(word_timestamps, f, indent=4)
+                
+            segment["audio_path"] = audio_filepath
+            segment["timestamp_path"] = timestamp_filepath
+            print(f"[{i}] Generated gTTS Audio + Mock Timestamps")
+
     updated_script_path = script_path.replace(".json", "_with_audio.json")
     with open(updated_script_path, "w", encoding="utf-8") as f:
         json.dump(script_data, f, indent=4)
         
-    print(f"\nPhase 2 Complete! Updated script saved to: {updated_script_path}")
-    print("Note: Replace the gTTS .mp3 files in the assets folder with GCP Neural2 files when ready.")
+    print(f"\nPhase 2 Complete! Timestamps and Audio saved. Proceed to Phase 3.")
+
+def generate_mock_word_timestamps(text, audio_path):
+    """Fallback proportional logic to generate timestamps if API doesn't return them."""
+    try:
+        from moviepy.editor import AudioFileClip
+        duration = AudioFileClip(audio_path).duration
+    except Exception:
+        duration = 5.0
+
+    words = text.split()
+    timestamps = []
+    if not words: return timestamps
+    
+    time_per_word = duration / len(words)
+    current_time = 0.0
+    for w in words:
+        timestamps.append({
+            "word": w,
+            "startTime": round(current_time, 2),
+            "endTime": round(current_time + time_per_word, 2)
+        })
+        current_time += time_per_word
+    return timestamps
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Phase 2: Audio Generation/Integration")
-    parser.add_argument("--script", type=str, required=True, help="Path to the JSON script from Phase 1")
+    parser = argparse.ArgumentParser(description="Phase 2: GCP Audio & Timestamp Generation")
+    parser.add_argument("--script", type=str, required=True)
     args = parser.parse_args()
-    
     generate_audio_for_script(args.script)

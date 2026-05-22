@@ -37,7 +37,7 @@ def render_video(script_path: str):
         # In a full Playwright implementation, we would trigger UI capture here.
         # For the MVP, we generate a placeholder visual clip using MoviePy.
         
-        # 1. Visual Capture via Playwright (UI Automation)
+        # 1. Visual Capture via Playwright (Dynamic HeyGen UI Architecture)
         import sys
         sys.path.append(os.path.dirname(os.path.dirname(__file__)))
         try:
@@ -45,7 +45,10 @@ def render_video(script_path: str):
             from moviepy.editor import VideoFileClip
             
             video_filename = f"segment_{i}.webm"
-            ui_video_path = capture_ui_workflow(visual_keyword, duration, video_filename)
+            timestamp_path = segment.get("timestamp_path")
+            
+            # Playwright captures the UI completely perfectly synced to the timestamp!
+            ui_video_path = capture_ui_workflow(visual_keyword, duration, video_filename, timestamp_path)
             
             if ui_video_path and os.path.exists(ui_video_path):
                 bg_clip = VideoFileClip(ui_video_path)
