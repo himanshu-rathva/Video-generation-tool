@@ -1,0 +1,5 @@
+google-generativeai
+python-dotenv
+gTTS
+moviepy==1.0.3
+playwright

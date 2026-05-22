@@ -1,0 +1,8 @@
+.env
+__pycache__/
+outputs/
+assets/visuals/
+assets/audio/
+*.webm
+*.mp4
+*.mp3
