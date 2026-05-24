@@ -26,22 +26,25 @@ def generate_script(topic: str):
         
         prompt = f"""
         You are an expert video script writer. Write a 60-second video script about: "{topic}".
-        The script should be engaging and perfectly timed for 60 seconds (around 130-150 words).
+        The script should be highly engaging, hook-driven, and perfectly timed for 60 seconds (around 130-150 words).
         
         Output the script strictly as a JSON object with a timeline. The JSON structure must be:
         {{
             "topic": "{topic}",
             "duration_seconds": 60,
+            "music_mood": "cyberpunk synthwave" or "motivational cinematic" or "high energy tech beats" or "dark dramatic trap" (choose one fitting the topic),
             "timeline": [
                 {{
                     "start_time": 0.0,
                     "end_time": 5.0,
                     "text": "Sentence or phrase to be spoken.",
-                    "visual_keyword": "keyword for UI capture or stock clip"
+                    "visual_type": "broll" or "code" or "ui",
+                    "visual_prompt": "If 'broll', write a detailed ultra-HD cinematic stock video prompt. If 'code', write a valid short beautiful 4-8 line snippet of python/javascript code representing the topic. If 'ui', write the exact phrase or prompt the user types in an AI search bar.",
+                    "visual_keyword": "A simple 1-3 word search term for Pexels API (e.g. 'coding neon', 'cybersecurity laptop', 'ai brain'). Keep it extremely simple for search matching."
                 }}
             ]
         }}
-        Ensure the timelines roughly cover the 60-second duration sequentially.
+        Ensure the timelines roughly cover the 60-second duration sequentially. Make the visual flow dynamic by mixing 'broll', 'code', and 'ui' elements creatively.
         """
         
         response = client.models.generate_content(
@@ -65,18 +68,23 @@ def mock_generate_script(topic: str):
     script_data = {
         "topic": topic,
         "duration_seconds": 60,
+        "music_mood": "high energy tech beats",
         "timeline": [
             {
                 "start_time": 0.0,
                 "end_time": 5.0,
                 "text": f"Welcome to this quick guide on {topic}.",
-                "visual_keyword": "intro title screen"
+                "visual_type": "broll",
+                "visual_prompt": "Cinematic shot of neon cyber tech laboratory with a programmer working in dark room, 4k resolution.",
+                "visual_keyword": "tech neon programmer"
             },
             {
                 "start_time": 5.0,
                 "end_time": 15.0,
-                "text": "Today we will see how AI can automate your daily workflow.",
-                "visual_keyword": "ai automation"
+                "text": "Today we will see how AI can automate your daily workflow with simple code.",
+                "visual_type": "code",
+                "visual_prompt": "def automate_work():\n    for task in daily_routine:\n        ai.execute(task)\n        print('Done!')",
+                "visual_keyword": "coding developer"
             }
         ]
     }

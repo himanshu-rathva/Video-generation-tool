@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinematic Code Visualizer</title>
+    <!-- Code Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@500&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Prism.js Monokai Theme CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <!-- Prism.js python/javascript support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <!-- GSAP for smooth camera animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            /* Premium Dark Cyberpunk Gradient Background */
+            background: linear-gradient(135deg, #0b071e, #140d34, #05030e);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        /* 9:16 Portrait Canvas */
+        .canvas {
+            width: 1080px;
+            height: 1920px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            perspective: 1000px; /* Enable 3D depth */
+        }
+
+        /* Sleek Editor Window with Neon Glow */
+        .editor-window {
+            width: 900px;
+            height: 1200px;
+            background-color: #12131a;
+            border-radius: 20px;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.8), 0 0 50px rgba(123, 75, 235, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transform-origin: center center;
+        }
+
+        /* IDE Window Top Bar */
+        .top-bar {
+            height: 60px;
+            background-color: #0b0c10;
+            display: flex;
+            align-items: center;
+            padding: 0 25px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        /* Window Buttons (Mac Style) */
+        .buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background-color: #ff5f56; }
+        .dot-yellow { background-color: #ffbd2e; }
+        .dot-green { background-color: #27c93f; }
+
+        .tab-title {
+            margin-left: 40px;
+            font-family: 'Inter', sans-serif;
+            font-size: 22px;
+            color: #8f93a2;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tab-title::before {
+            content: "⚡";
+            font-size: 20px;
+        }
+
+        /* Editor Content */
+        .code-container {
+            flex: 1;
+            padding: 40px 50px;
+            overflow: hidden;
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 38px;
+            line-height: 1.6;
+            color: #f8f8f2;
+            text-align: left;
+            position: relative;
+        }
+
+        pre {
+            margin: 0;
+            background: transparent !important;
+            padding: 0 !important;
+        }
+
+        code {
+            font-family: inherit !important;
+        }
+
+        /* Glowing Cursor */
+        .cursor {
+            display: inline-block;
+            width: 4px;
+            height: 46px;
+            background-color: #a77cff;
+            margin-left: 5px;
+            vertical-align: middle;
+            animation: blink 0.8s step-end infinite;
+            box-shadow: 0 0 15px #a77cff;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* Glowing Background Mesh Decor */
+        .glow-circle {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(123, 75, 235, 0.25) 0%, rgba(123,75,235,0) 70%);
+            filter: blur(50px);
+            z-index: 1;
+        }
+
+        .glow-1 { top: 200px; left: -100px; }
+        .glow-2 { bottom: 200px; right: -100px; }
+    </style>
+</head>
+<body>
+    <div class="canvas">
+        <div class="glow-circle glow-1"></div>
+        <div class="glow-circle glow-2"></div>
+        
+        <div class="editor-window" id="editor">
+            <div class="top-bar">
+                <div class="buttons">
+                    <div class="dot dot-red"></div>
+                    <div class="dot dot-yellow"></div>
+                    <div class="dot dot-green"></div>
+                </div>
+                <div class="tab-title" id="file-title">main.py</div>
+            </div>
+            <div class="code-container">
+                <pre><code class="language-python" id="code-box"></code><span class="cursor"></span></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.loadCode = function(codeText, duration) {
+            console.log("Loading code snippet...", codeText, "Duration:", duration);
+            const codeBox = document.getElementById("code-box");
+            const fileTitle = document.getElementById("file-title");
+
+            // Auto detect language inside template
+            let lang = "python";
+            if (codeText.includes("function") || codeText.includes("const ") || codeText.includes("console.log")) {
+                lang = "javascript";
+                codeBox.className = "language-javascript";
+                fileTitle.innerText = "index.js";
+            } else {
+                codeBox.className = "language-python";
+                fileTitle.innerText = "automate.py";
+            }
+
+            // Clean previous code
+            codeBox.innerHTML = "";
+
+            // Kinetic Typing & Syntax Highlighting Logic
+            let currentIndex = 0;
+            const textLength = codeText.length;
+            const typingInterval = (duration * 0.8) / textLength; // leave 20% buffer at the end
+
+            function typeNextChar() {
+                if (currentIndex < textLength) {
+                    codeBox.textContent += codeText.charAt(currentIndex);
+                    currentIndex++;
+                    
+                    // Trigger Prism highlighter on each character typing (high accuracy)
+                    Prism.highlightElement(codeBox);
+                    
+                    setTimeout(typeNextChar, typingInterval * 1000);
+                }
+            }
+
+            // Cinematic Zoom-In & Subtle Rotate Panning using GSAP
+            gsap.fromTo("#editor", 
+                { scale: 0.8, rotationX: 10, rotationY: -10, z: -200 },
+                { 
+                    scale: 1.15, 
+                    rotationX: 0, 
+                    rotationY: 0, 
+                    z: 50,
+                    duration: duration, 
+                    ease: "sine.inOut" 
+                }
+            );
+
+            // Start typing
+            setTimeout(typeNextChar, 300);
+        };
+    </script>
+</body>
+</html>

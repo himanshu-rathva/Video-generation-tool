@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic VFX Captions</title>
+    <!-- Import Premium Fonts from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Outfit:wght@900&display=swap" rel="stylesheet">
+    <!-- Load GreenSock Animation Platform (GSAP) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #00ff00; /* Pure Green Screen for Chromakey */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        /* 9:16 Portrait Canvas Box */
+        .canvas {
+            width: 1080px;
+            height: 1920px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .caption-container {
+            width: 90%;
+            text-align: center;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-content: center;
+            gap: 15px 25px;
+            padding: 20px;
+        }
+
+        .word-box {
+            font-family: 'Montserrat', 'Outfit', sans-serif;
+            font-size: 85px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #ffffff;
+            /* Alex Hormozi style stroke & shadow */
+            -webkit-text-stroke: 6px #000000;
+            text-shadow: 0px 10px 0px #000000;
+            display: inline-block;
+            transition: color 0.1s ease;
+            transform-origin: center bottom;
+        }
+
+        .active-word {
+            color: #ffeb3b !important; /* Premium Bright Yellow */
+            -webkit-text-stroke: 6px #000000;
+            text-shadow: 0px 10px 0px #000000, 0px 0px 30px rgba(255, 235, 59, 0.6);
+        }
+
+        /* Support for dynamic emoji pops */
+        .emoji {
+            font-size: 110px;
+            display: block;
+            margin-bottom: 20px;
+            transform-origin: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="canvas">
+        <div id="emoji-container"></div>
+        <div class="caption-container" id="caption-box"></div>
+    </div>
+
+    <script>
+        // Dictionary of words to emojis for auto-emoji feature
+        const emojiMap = {
+            "ai": "🤖", "automation": "⚙️", "future": "🚀", "money": "💰", "cash": "💵",
+            "rich": "🤑", "growth": "📈", "secret": "🤫", "fire": "🔥", "hot": "🔥",
+            "work": "💼", "brain": "🧠", "mind": "🧠", "build": "🛠️", "code": "💻",
+            "coding": "💻", "programmer": "👨‍💻", "computer": "🖥️", "rocket": "🚀",
+            "danger": "⚠️", "warning": "⚠️", "easy": "⚡", "fast": "⚡", "speed": "⚡"
+        };
+
+        function getEmojiForWord(word) {
+            const cleanWord = word.toLowerCase().replace(/[^a-z]/g, "");
+            return emojiMap[cleanWord] || null;
+        }
+
+        window.loadCaptions = function(timestamps) {
+            console.log("Loading timestamps...", timestamps);
+            if (!timestamps || timestamps.length === 0) return;
+
+            const captionBox = document.getElementById("caption-box");
+            const emojiContainer = document.getElementById("emoji-container");
+
+            // Group timestamps into phrases (approx. 4 words or 1.8 seconds max per phrase)
+            const phrases = [];
+            let currentPhrase = [];
+            let phraseStartTime = timestamps[0].startTime;
+
+            timestamps.forEach((ts, idx) => {
+                const duration = ts.endTime - phraseStartTime;
+                currentPhrase.push(ts);
+
+                // Split condition: more than 4 words or > 1.8 seconds, or sentence end punctuation
+                const isPunctuation = /[.!?]$/.test(ts.word);
+                if (currentPhrase.length >= 4 || duration > 1.8 || isPunctuation || idx === timestamps.length - 1) {
+                    phrases.push([...currentPhrase]);
+                    currentPhrase = [];
+                    if (idx < timestamps.length - 1) {
+                        phraseStartTime = timestamps[idx + 1].startTime;
+                    }
+                }
+            });
+
+            // Master GSAP Timeline
+            const masterTimeline = gsap.timeline();
+
+            phrases.forEach((phrase, pIdx) => {
+                const pStart = phrase[0].startTime;
+                const pEnd = phrase[phrase.length - 1].endTime;
+
+                // Schedule showing this phrase
+                masterTimeline.add(() => {
+                    // Render phrase words
+                    captionBox.innerHTML = "";
+                    emojiContainer.innerHTML = "";
+
+                    let activeEmoji = null;
+
+                    phrase.forEach((ts, wIdx) => {
+                        const span = document.createElement("span");
+                        span.className = "word-box";
+                        span.id = `word-${pIdx}-${wIdx}`;
+                        span.innerText = ts.word;
+                        captionBox.appendChild(span);
+
+                        // Check for auto-emoji
+                        const emoji = getEmojiForWord(ts.word);
+                        if (emoji && !activeEmoji) {
+                            activeEmoji = emoji;
+                        }
+                    });
+
+                    // If we have a matching emoji, show it with a bouncy pop animation
+                    if (activeEmoji) {
+                        const emojiEl = document.createElement("div");
+                        emojiEl.className = "emoji";
+                        emojiEl.innerText = activeEmoji;
+                        emojiContainer.appendChild(emojiEl);
+
+                        gsap.fromTo(emojiEl, 
+                            { scale: 0, rotation: -20 },
+                            { scale: 1, rotation: 0, duration: 0.35, ease: "back.out(1.7)" }
+                        );
+                    }
+                }, pStart);
+
+                // Schedule active word highlighting inside this phrase
+                phrase.forEach((ts, wIdx) => {
+                    masterTimeline.add(() => {
+                        const wordEl = document.getElementById(`word-${pIdx}-${wIdx}`);
+                        if (wordEl) {
+                            // Turn active yellow and bounce
+                            wordEl.classList.add("active-word");
+                            gsap.fromTo(wordEl, 
+                                { scale: 1 }, 
+                                { scale: 1.25, duration: 0.15, ease: "back.out(2)" }
+                            );
+                        }
+                    }, ts.startTime);
+
+                    masterTimeline.add(() => {
+                        const wordEl = document.getElementById(`word-${pIdx}-${wIdx}`);
+                        if (wordEl) {
+                            // Revert to normal
+                            wordEl.classList.remove("active-word");
+                            gsap.to(wordEl, { scale: 1, duration: 0.1 });
+                        }
+                    }, ts.endTime);
+                });
+
+                // Clear phrase at the end of its timeline
+                masterTimeline.add(() => {
+                    captionBox.innerHTML = "";
+                    emojiContainer.innerHTML = "";
+                }, pEnd);
+            });
+        };
+    </script>
+</body>
+</html>

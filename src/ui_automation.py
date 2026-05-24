@@ -138,7 +138,11 @@ def capture_ui_workflow(keyword: str, duration: float, output_filename: str, tim
             browser.close()
             
             # Clean up and rename
-            files = [os.path.join(visuals_dir, f) for f in os.listdir(visuals_dir) if f.endswith(".webm")]
+            files = [
+                os.path.join(visuals_dir, f) 
+                for f in os.listdir(visuals_dir) 
+                if f.endswith(".webm") and not f.startswith("code") and not f.startswith("caption")
+            ]
             if files:
                 latest_video = max(files, key=os.path.getctime)
                 if latest_video != output_path:
@@ -154,5 +158,73 @@ def capture_ui_workflow(keyword: str, duration: float, output_filename: str, tim
             
     return None
 
+def render_code_visual(code_text: str, duration: float, output_filename: str) -> str:
+    """
+    Kinetic Codebase Visual Renderer.
+    Loads the cinematic IDE-style code visualizer template, feeds the code text,
+    plays characters typing and camera movements via GSAP, and records a 9:16 vertical video.
+    """
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    visuals_dir = os.path.join(base_dir, "assets", "visuals")
+    os.makedirs(visuals_dir, exist_ok=True)
+    
+    output_filename = output_filename.replace(".mp4", ".webm")
+    output_path = os.path.join(visuals_dir, output_filename)
+    
+    if os.path.exists(output_path):
+        print(f"Using cached code typing visual: {output_path}")
+        return output_path
+
+    print(f"🎬 Code Visualizer Engine: Rendering cinematically highlighted typing sequence...")
+    
+    template_path = os.path.join(base_dir, "src", "templates", "code_template.html")
+    if not os.path.exists(template_path):
+        print(f"❌ Code template not found at: {template_path}")
+        return None
+        
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            record_video_dir=visuals_dir,
+            record_video_size={"width": 1080, "height": 1920},
+            viewport={"width": 1080, "height": 1920}
+        )
+        page = context.new_page()
+        
+        try:
+            page.goto(f"file://{template_path}")
+            
+            # Escape newlines and quotes to prevent JS parsing syntax errors
+            escaped_code = json.dumps(code_text)
+            page.evaluate(f"window.loadCode({escaped_code}, {duration})")
+            
+            # Wait for compilation and animation
+            time.sleep(duration + 0.3)
+            
+        except Exception as e:
+            print(f"❌ Error rendering code visualizer: {e}")
+        finally:
+            page.close()
+            context.close()
+            browser.close()
+            
+            # Playwright saves a random file.webm in visuals_dir. Let's isolate the code video.
+            recorded_files = [
+                os.path.join(visuals_dir, f) 
+                for f in os.listdir(visuals_dir) 
+                if f.endswith(".webm") and not f.startswith("broll") and not f.startswith("caption") and "temp" not in f
+            ]
+            
+            if recorded_files:
+                latest_webm = max(recorded_files, key=os.path.getctime)
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                os.rename(latest_webm, output_path)
+                print(f"✅ Dynamic Code Typing Visual saved to: {output_path}")
+                return output_path
+                
+    return None
+
 if __name__ == "__main__":
-    capture_ui_workflow("AI Automation Workflow", 5.0, "test_dynamic.webm")
+    test_code = "def start_ai():\n    engine = CoreEngine()\n    engine.train(epochs=100)\n    return 'Automation Active!'"
+    render_code_visual(test_code, 5.0, "test_code.webm")
