@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Render Template</title>
+    <!-- Code & UI Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Outfit:wght@900&family=Fira+Code:wght@500&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Prism.js Syntax Highlighting for Code Visuals -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    
+    <!-- GSAP for Kinetic Animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0b071e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        /* 9:16 Vertical Shorts/Reels Canvas */
+        .canvas {
+            width: 1080px;
+            height: 1920px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            perspective: 1000px;
+        }
+
+        /* --- 1. BACKDROP ELEMENTS --- */
+        .backdrop-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Video element for B-Roll mode */
+        #broll-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        /* --- 2. CODE VISUALIZER INTERFACE --- */
+        #code-editor {
+            width: 900px;
+            height: 1200px;
+            background-color: #12131a;
+            border-radius: 20px;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.8), 0 0 50px rgba(123, 75, 235, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 2;
+        }
+
+        .top-bar {
+            height: 60px;
+            background-color: #0b0c10;
+            display: flex;
+            align-items: center;
+            padding: 0 25px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .dot-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        .dot-red { background-color: #ff5f56; }
+        .dot-yellow { background-color: #ffbd2e; }
+        .dot-green { background-color: #27c93f; }
+
+        .tab-title {
+            margin-left: 40px;
+            font-family: 'Inter', sans-serif;
+            font-size: 22px;
+            color: #8f93a2;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .tab-title::before { content: "💻"; }
+
+        .code-container {
+            flex: 1;
+            padding: 40px 50px;
+            overflow: hidden;
+            font-family: 'Fira Code', monospace;
+            font-size: 36px;
+            line-height: 1.6;
+            color: #f8f8f2;
+            text-align: left;
+            position: relative;
+        }
+
+        .code-container pre {
+            margin: 0;
+            background: transparent !important;
+            padding: 0 !important;
+        }
+
+        /* --- 3. UI SEARCH WORKFLOW INTERFACE --- */
+        #ui-mockup {
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, #1a1735 0%, #0c0822 100%);
+            z-index: 2;
+        }
+
+        .ui-header {
+            font-family: 'Inter', sans-serif;
+            font-size: 56px;
+            font-weight: 700;
+            background: -webkit-linear-gradient(45deg, #4285f4, #d96570, #9b72cb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 50px;
+        }
+
+        .ui-search-box {
+            background-color: #1e1f20;
+            border: 1px solid #444;
+            border-radius: 30px;
+            padding: 25px 40px;
+            width: 75%;
+            font-family: 'Inter', sans-serif;
+            font-size: 32px;
+            color: #e3e3e3;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* Static blinky cursor */
+        .cursor {
+            display: inline-block;
+            width: 4px;
+            height: 42px;
+            background-color: #a77cff;
+            margin-left: 5px;
+            vertical-align: middle;
+            animation: blink 0.8s step-end infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* --- 4. FOREGROUND CAPTIONS LAYERS --- */
+        .captions-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10; /* Keep captions strictly on top */
+            pointer-events: none;
+        }
+
+        #emoji-container {
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .emoji {
+            font-size: 130px;
+            transform-origin: center;
+        }
+
+        .caption-container {
+            width: 90%;
+            text-align: center;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-content: center;
+            gap: 15px 25px;
+            padding: 20px;
+            height: 250px;
+        }
+
+        .word-box {
+            font-family: 'Montserrat', 'Outfit', sans-serif;
+            font-size: 90px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #ffffff;
+            -webkit-text-stroke: 6px #000000;
+            text-shadow: 0px 10px 0px #000000;
+            display: inline-block;
+            transition: color 0.1s ease;
+            transform-origin: center bottom;
+        }
+
+        .active-word {
+            color: #ffeb3b !important; /* Premium Glow Yellow */
+            -webkit-text-stroke: 6px #000000;
+            text-shadow: 0px 10px 0px #000000, 0px 0px 30px rgba(255, 235, 59, 0.7);
+        }
+
+        /* Visual Mesh Ambient Decor */
+        .ambient-mesh {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(123, 75, 235, 0.12) 0%, rgba(123,75,235,0) 70%);
+            filter: blur(80px);
+            z-index: 1;
+            pointer-events: none;
+            display: none;
+        }
+        .mesh-1 { top: 100px; left: -100px; }
+        .mesh-2 { bottom: 100px; right: -100px; }
+    </style>
+</head>
+<body>
+    <div class="canvas">
+        <div class="ambient-mesh mesh-1" id="mesh-1"></div>
+        <div class="ambient-mesh mesh-2" id="mesh-2"></div>
+
+        <!-- 1. Stock B-Roll Backdrop -->
+        <div class="backdrop-container">
+            <video id="broll-video" autoplay loop muted></video>
+        </div>
+
+        <!-- 2. Code Editor Visual Backdrop -->
+        <div id="code-editor">
+            <div class="top-bar">
+                <div class="dot-buttons">
+                    <div class="dot dot-red"></div>
+                    <div class="dot dot-yellow"></div>
+                    <div class="dot dot-green"></div>
+                </div>
+                <div class="tab-title" id="code-tab-title">automate.py</div>
+            </div>
+            <div class="code-container">
+                <pre><code class="language-python" id="code-box"></code><span class="cursor"></span></pre>
+            </div>
+        </div>
+
+        <!-- 3. UI search Mockup Backdrop -->
+        <div id="ui-mockup">
+            <div class="ui-header" id="ui-header-text">Gemini UI</div>
+            <div class="ui-search-box">
+                <span id="ui-search-text"></span><span class="cursor"></span>
+            </div>
+        </div>
+
+        <!-- 4. Top-level synced VFX Captions Layer -->
+        <div class="captions-layer">
+            <div id="emoji-container"></div>
+            <div class="caption-container" id="caption-box"></div>
+        </div>
+    </div>
+
+    <script>
+        const emojiMap = {
+            "ai": "🤖", "automation": "⚙️", "future": "🚀", "money": "💰", "cash": "💵",
+            "rich": "🤑", "growth": "📈", "secret": "🤫", "fire": "🔥", "hot": "🔥",
+            "work": "💼", "brain": "🧠", "mind": "🧠", "build": "🛠️", "code": "💻",
+            "coding": "💻", "programmer": "👨‍💻", "computer": "🖥️", "rocket": "🚀",
+            "danger": "⚠️", "warning": "⚠️", "easy": "⚡", "fast": "⚡", "speed": "⚡"
+        };
+
+        function getEmojiForWord(word) {
+            const cleanWord = word.toLowerCase().replace(/[^a-z]/g, "");
+            return emojiMap[cleanWord] || null;
+        }
+
+        // Main Rendering Orchestration
+        window.startMasterRender = function(visualType, brollUrl, codeText, uiKeyword, timestampsJson, duration) {
+            console.log("Master Render Started. Type:", visualType, "Duration:", duration);
+            const timestamps = typeof timestampsJson === 'string' ? JSON.parse(timestampsJson) : timestampsJson;
+            
+            // --- STEP A: CONFIG BACKDROP ---
+            if (visualType === "broll" && brollUrl) {
+                const vid = document.getElementById("broll-video");
+                vid.style.display = "block";
+                vid.src = brollUrl;
+                vid.play();
+            } 
+            else if (visualType === "code" && codeText) {
+                const editor = document.getElementById("code-editor");
+                const codeBox = document.getElementById("code-box");
+                const tabTitle = document.getElementById("code-tab-title");
+                
+                editor.style.display = "flex";
+                document.getElementById("mesh-1").style.display = "block";
+                document.getElementById("mesh-2").style.display = "block";
+
+                let lang = "python";
+                if (codeText.includes("function") || codeText.includes("const ") || codeText.includes("console.log")) {
+                    lang = "javascript";
+                    codeBox.className = "language-javascript";
+                    tabTitle.innerText = "index.js";
+                } else {
+                    codeBox.className = "language-python";
+                    codeBox.className = "language-python";
+                    tabTitle.innerText = "automate.py";
+                }
+
+                // Typewriter effect inside the code editor
+                let currIdx = 0;
+                const totalLen = codeText.length;
+                const typingDelay = (duration * 0.8) / totalLen; // Leave a 20% breathing space
+
+                function typeCodeChar() {
+                    if (currIdx < totalLen) {
+                        codeBox.textContent += codeText.charAt(currIdx);
+                        currIdx++;
+                        Prism.highlightElement(codeBox);
+                        setTimeout(typeCodeChar, typingDelay * 1000);
+                    }
+                }
+                setTimeout(typeCodeChar, 300);
+
+                // Smooth camera motion for codebase IDE
+                gsap.fromTo("#code-editor", 
+                    { scale: 0.8, rotationX: 10, rotationY: -10, z: -150 },
+                    { scale: 1.12, rotationX: 0, rotationY: 0, z: 20, duration: duration, ease: "sine.inOut" }
+                );
+            }
+            else if (visualType === "ui" && uiKeyword) {
+                const uiMock = document.getElementById("ui-mockup");
+                const uiSearch = document.getElementById("ui-search-text");
+                const uiHeader = document.getElementById("ui-header-text");
+                
+                uiMock.style.display = "flex";
+                uiHeader.innerText = uiKeyword.length < 20 ? `Hello, ${uiKeyword}` : "Gemini UI";
+
+                // Dynamic UI search typing synced EXACTLY to voice timestamps
+                if (timestamps && timestamps.length > 0) {
+                    const baseTime = performance.now();
+                    timestamps.forEach((ts) => {
+                        setTimeout(() => {
+                            uiSearch.innerText += ts.word + " ";
+                        }, ts.startTime * 1000);
+                    });
+                }
+            }
+
+            // --- STEP B: SYNC VFX CAPTIONS OVERLAY ---
+            if (timestamps && timestamps.length > 0) {
+                const captionBox = document.getElementById("caption-box");
+                const emojiContainer = document.getElementById("emoji-container");
+
+                // Group words into readable visual phrases
+                const phrases = [];
+                let currentPhrase = [];
+                let phraseStartTime = timestamps[0].startTime;
+
+                timestamps.forEach((ts, idx) => {
+                    const segmentDuration = ts.endTime - phraseStartTime;
+                    currentPhrase.push(ts);
+
+                    const isPunctuation = /[.!?]$/.test(ts.word);
+                    if (currentPhrase.length >= 4 || segmentDuration > 1.8 || isPunctuation || idx === timestamps.length - 1) {
+                        phrases.push([...currentPhrase]);
+                        currentPhrase = [];
+                        if (idx < timestamps.length - 1) {
+                            phraseStartTime = timestamps[idx + 1].startTime;
+                        }
+                    }
+                });
+
+                const masterTimeline = gsap.timeline();
+
+                phrases.forEach((phrase, pIdx) => {
+                    const pStart = phrase[0].startTime;
+                    const pEnd = phrase[phrase.length - 1].endTime;
+
+                    // Display active phrase
+                    masterTimeline.add(() => {
+                        captionBox.innerHTML = "";
+                        emojiContainer.innerHTML = "";
+                        let activeEmoji = null;
+
+                        phrase.forEach((ts, wIdx) => {
+                            const span = document.createElement("span");
+                            span.className = "word-box";
+                            span.id = `word-${pIdx}-${wIdx}`;
+                            span.innerText = ts.word;
+                            captionBox.appendChild(span);
+
+                            const emoji = getEmojiForWord(ts.word);
+                            if (emoji && !activeEmoji) activeEmoji = emoji;
+                        });
+
+                        if (activeEmoji) {
+                            const emojiEl = document.createElement("div");
+                            emojiEl.className = "emoji";
+                            emojiEl.innerText = activeEmoji;
+                            emojiContainer.appendChild(emojiEl);
+
+                            gsap.fromTo(emojiEl, 
+                                { scale: 0, rotation: -20 },
+                                { scale: 1, rotation: 0, duration: 0.35, ease: "back.out(1.7)" }
+                            );
+                        }
+                    }, pStart);
+
+                    // Word highlight syncing
+                    phrase.forEach((ts, wIdx) => {
+                        masterTimeline.add(() => {
+                            const wordEl = document.getElementById(`word-${pIdx}-${wIdx}`);
+                            if (wordEl) {
+                                wordEl.classList.add("active-word");
+                                gsap.fromTo(wordEl, { scale: 1 }, { scale: 1.25, duration: 0.15, ease: "back.out(2)" });
+                            }
+                        }, ts.startTime);
+
+                        masterTimeline.add(() => {
+                            const wordEl = document.getElementById(`word-${pIdx}-${wIdx}`);
+                            if (wordEl) {
+                                wordEl.classList.remove("active-word");
+                                gsap.to(wordEl, { scale: 1, duration: 0.1 });
+                            }
+                        }, ts.endTime);
+                    });
+
+                    // Clear active phrase
+                    masterTimeline.add(() => {
+                        captionBox.innerHTML = "";
+                        emojiContainer.innerHTML = "";
+                    }, pEnd);
+                });
+            }
+        };
+    </script>
+</body>
+</html>
