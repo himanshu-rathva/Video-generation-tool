@@ -82,9 +82,9 @@ def download_sfx(output_path: str) -> str:
     Tries multiple candidate URLs to ensure high reliability.
     """
     sfx_urls = [
-        "https://actions.google.com/sounds/v1/transitional/wind_swoosh.ogg",
-        "https://actions.google.com/sounds/v1/transitional/slide_whistle.ogg",
-        "https://actions.google.com/sounds/v1/science_fiction/digital_zoom.ogg"
+        "https://www.soundjay.com/misc/sounds/swish-1.mp3",
+        "https://www.soundjay.com/misc/sounds/swish-2.mp3",
+        "https://actions.google.com/sounds/v1/transitional/wind_swoosh.ogg"
     ]
     if os.path.exists(output_path):
         return output_path
