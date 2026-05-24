@@ -120,8 +120,9 @@ def capture_ui_workflow(keyword: str, duration: float, output_filename: str, tim
                     while (time.time() - start_time) < target_time:
                         time.sleep(0.005)
                         
-                    # Inject the word exactly when spoken
-                    page.evaluate(f"window.typeWord('{word}')")
+                    # Inject the word exactly when spoken, safely escaped for JS evaluation
+                    escaped_word = json.dumps(word)
+                    page.evaluate(f"window.typeWord({escaped_word})")
                 
                 # Keep recording until audio finishes
                 elapsed = time.time() - start_time

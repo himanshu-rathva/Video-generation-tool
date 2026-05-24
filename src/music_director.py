@@ -42,10 +42,11 @@ def build_sidechain_ducking_filter(active_speech_intervals: list):
     """
     Generates a dynamic volume envelope function that acts as a sidechain gate.
     Ducks the background music smoothly when voiceover speech is active.
+    Supports both scalar time t and numpy arrays (chunk-based audio rendering).
     """
-    def volume_envelope(t):
-        # Determine if speech is active in a small window around time 't'
-        # This moving-window creates a perfect smooth attack/release volume fade
+    import numpy as np
+
+    def single_volume_envelope(t):
         steps = 7
         speaking_ratio = 0
         window_size = 0.3 # 300ms fade window
@@ -62,36 +63,49 @@ def build_sidechain_ducking_filter(active_speech_intervals: list):
                 speaking_ratio += 1
                 
         ratio = speaking_ratio / steps # 0.0 (silent) to 1.0 (speaking)
-        
-        # Smooth interpolation:
-        # Speaking volume: 0.08 (quiet enough to make voice clear)
-        # Quiet volume: 0.38 (loud enough to fill empty space)
         return 0.38 - (0.30 * ratio)
-        
+
+    def volume_envelope(t):
+        if isinstance(t, np.ndarray):
+            # Compute ducking factor for each sample in the array
+            env = np.array([single_volume_envelope(ti) for ti in t])
+            # Reshape to (n, 1) so it broadcasts against MoviePy's stereo (n, 2) sound arrays
+            return env[:, np.newaxis]
+        else:
+            return single_volume_envelope(t)
+            
     return volume_envelope
 
 def download_sfx(output_path: str) -> str:
     """
     Downloads a high-quality swish/swoosh transition sound effect.
+    Tries multiple candidate URLs to ensure high reliability.
     """
-    sfx_url = "https://actions.google.com/sounds/v1/transitional/swish_2.ogg"
+    sfx_urls = [
+        "https://actions.google.com/sounds/v1/transitional/wind_swoosh.ogg",
+        "https://actions.google.com/sounds/v1/transitional/slide_whistle.ogg",
+        "https://actions.google.com/sounds/v1/science_fiction/digital_zoom.ogg"
+    ]
     if os.path.exists(output_path):
         return output_path
         
     print(f"🔊 SFX Director: Downloading transition sound effect...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
-    try:
-        response = requests.get(sfx_url, stream=True, timeout=15)
-        response.raise_for_status()
-        
-        with open(output_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-                
-        print(f"✅ SFX downloaded: {output_path}")
-        return output_path
-    except Exception as e:
-        print(f"⚠️ SFX download failed: {e}. Transitions will be silent.")
-        return None
+    for url in sfx_urls:
+        try:
+            response = requests.get(url, stream=True, timeout=10)
+            response.raise_for_status()
+            
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+            print(f"✅ SFX downloaded: {output_path}")
+            return output_path
+        except Exception as e:
+            print(f"⚠️ SFX download candidate failed ({url.split('/')[-1]}): {e}. Trying next...")
+            
+    print("⚠️ All SFX download candidates failed. Transitions will be silent.")
+    return None
 
